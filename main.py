@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, Field
 from typing import Optional, List
 
 app = FastAPI(
@@ -15,15 +15,17 @@ class UsuarioBase(BaseModel):
     rol: Optional[str] = "cliente"
 
 class UsuarioCreate(UsuarioBase):
+    # El id es el número de cédula: lo envía el cliente, no se autogenera
+    id: int = Field(..., ge=1, le=9999999999, description="Número de cédula del usuario")
     password: str
 
 class UsuarioResponse(UsuarioBase):
-    id: int
+    id: int = Field(..., description="Número de cédula del usuario")
 
     class Config:
         json_schema_extra = {
             "example": {
-                "id": 1,
+                "id": 1012345678,
                 "nombre": "Juan Pérez",
                 "email": "juan@example.com",
                 "rol": "cliente"
@@ -36,18 +38,18 @@ class UsuarioResponse(UsuarioBase):
 def obtener_usuarios():
     """Retorna la lista de usuarios registrados."""
     return [
-        {"id": 1, "nombre": "Juan Pérez", "email": "juan@example.com", "rol": "cliente"}
+        {"id": 1012345678, "nombre": "Juan Pérez", "email": "juan@example.com", "rol": "cliente"}
     ]
 
-@app.get("/usuarios/{usuario_id}", response_model=UsuarioResponse, summary="Obtener un usuario por ID", tags=["Usuarios"])
+@app.get("/usuarios/{usuario_id}", response_model=UsuarioResponse, summary="Obtener un usuario por cédula", tags=["Usuarios"])
 def obtener_usuario(usuario_id: int):
-    """Retorna los detalles de un usuario específico."""
+    """Retorna los detalles de un usuario según su número de cédula."""
     return {"id": usuario_id, "nombre": "Juan Pérez", "email": "juan@example.com", "rol": "cliente"}
 
 @app.post("/usuarios", response_model=UsuarioResponse, status_code=201, summary="Crear un nuevo usuario", tags=["Usuarios"])
 def crear_usuario(usuario: UsuarioCreate):
-    """Crea un nuevo usuario en el sistema."""
-    return {"id": 100, "nombre": usuario.nombre, "email": usuario.email, "rol": usuario.rol}
+    """Crea un nuevo usuario. El id corresponde al número de cédula."""
+    return {"id": usuario.id, "nombre": usuario.nombre, "email": usuario.email, "rol": usuario.rol}
 
 @app.put("/usuarios/{usuario_id}", response_model=UsuarioResponse, summary="Actualizar usuario", tags=["Usuarios"])
 def actualizar_usuario(usuario_id: int, usuario: UsuarioBase):
