@@ -26,7 +26,7 @@ URL de conexión: `postgresql://usuarios_user:usuarios_pass@localhost:5432/usuar
 
 | Columna | Tipo | Notas |
 |---|---|---|
-| id | SERIAL | Clave primaria |
+| id | BIGINT | Clave primaria. **Es el número de cédula**; lo envía el cliente, no se autogenera. Entre 1 y 9999999999 |
 | nombre | VARCHAR(100) | Obligatorio |
 | email | VARCHAR(150) | Obligatorio, único |
 | password_hash | VARCHAR(255) | Contraseña cifrada (bcrypt) |
@@ -34,9 +34,13 @@ URL de conexión: `postgresql://usuarios_user:usuarios_pass@localhost:5432/usuar
 | activo | BOOLEAN | Por defecto TRUE |
 | creado_en | TIMESTAMP | Por defecto la fecha actual |
 
+## Referencia desde otros servicios
+
+Otros microservicios guardan este campo como `usuario_id` de tipo **BIGINT** (la cédula), sin llave foránea, porque cada servicio tiene su propia base.
+
 ## Datos de prueba
 
-5 usuarios (2 clientes, 2 vendedores, 1 admin). Contraseña de todos: `Test1234`.
+5 usuarios con cédulas ficticias (2 clientes, 2 vendedores, 1 admin). Contraseña de todos: `Test1234`.
 
 ## Verificar
 
