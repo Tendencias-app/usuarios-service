@@ -7,15 +7,19 @@
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 CREATE TABLE IF NOT EXISTS usuarios (
-    id             BIGINT       PRIMARY KEY,   -- número de cédula (lo envía el cliente, no se autogenera)
-    nombre         VARCHAR(100) NOT NULL,
-    email          VARCHAR(150) NOT NULL UNIQUE,
-    password_hash  VARCHAR(255) NOT NULL,
-    rol            VARCHAR(30)  NOT NULL DEFAULT 'cliente',
-    activo         BOOLEAN      NOT NULL DEFAULT TRUE,
-    creado_en      TIMESTAMP    NOT NULL DEFAULT NOW(),
+    id                 BIGINT       PRIMARY KEY,   -- número de cédula (lo envía el cliente, no se autogenera)
+    nombre             VARCHAR(100) NOT NULL,
+    email              VARCHAR(150) NOT NULL UNIQUE,
+    password_hash      VARCHAR(255) NOT NULL,
+    rol                VARCHAR(30)  NOT NULL DEFAULT 'cliente',
+    activo             BOOLEAN      NOT NULL DEFAULT TRUE,
+    multas_pendientes  INTEGER      NOT NULL DEFAULT 0,
+    -- Se calcula sola: solo puede rentar si está activo y no debe multas
+    puede_rentar       BOOLEAN GENERATED ALWAYS AS (activo AND multas_pendientes = 0) STORED,
+    creado_en          TIMESTAMP    NOT NULL DEFAULT NOW(),
     CONSTRAINT chk_usuarios_cedula CHECK (id BETWEEN 1 AND 9999999999),
-    CONSTRAINT chk_usuarios_rol    CHECK (rol IN ('cliente', 'vendedor', 'admin'))
+    CONSTRAINT chk_usuarios_rol    CHECK (rol IN ('cliente', 'vendedor', 'admin')),
+    CONSTRAINT chk_usuarios_multas CHECK (multas_pendientes >= 0)
 );
 
 CREATE INDEX IF NOT EXISTS idx_usuarios_rol ON usuarios (rol);
