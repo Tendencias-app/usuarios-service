@@ -31,9 +31,7 @@ URL de conexión: `postgresql://usuarios_user:usuarios_pass@localhost:5432/usuar
 | email | VARCHAR(150) | Obligatorio, único |
 | password_hash | VARCHAR(255) | Contraseña cifrada (bcrypt) |
 | rol | VARCHAR(30) | cliente (por defecto), vendedor o admin |
-| activo | BOOLEAN | Por defecto TRUE |
-| multas_pendientes | INTEGER | Cantidad de multas sin pagar. Por defecto 0, nunca negativo |
-| puede_rentar | BOOLEAN | **Calculada automáticamente**: TRUE solo si el usuario está activo y no tiene multas pendientes |
+| activo | BOOLEAN | Por defecto TRUE. **Lo modifican los eventos** `Usuario_usuarioActivado` (TRUE) y `Usuario_usuarioDesactivado` (FALSE) |
 | creado_en | TIMESTAMP | Por defecto la fecha actual |
 
 ## Referencia desde otros servicios
@@ -42,13 +40,11 @@ Otros microservicios guardan este campo como `usuario_id` de tipo **BIGINT** (la
 
 ## Datos de prueba
 
-5 usuarios con cédulas ficticias (2 clientes, 2 vendedores, 1 admin). Contraseña de todos: `Test1234`.
-
-María Gómez (`1023456789`) tiene 2 multas pendientes, así que `puede_rentar` es FALSE para ella. Sirve para probar el bloqueo.
+5 usuarios con cédulas ficticias (2 clientes, 2 vendedores, 1 admin), todos activos. Contraseña de todos: `Test1234`.
 
 ## Verificar
 
-    docker exec -it usuarios-db psql -U usuarios_user -d usuarios_db -c "SELECT id, nombre, multas_pendientes, puede_rentar FROM usuarios;"
+    docker exec -it usuarios-db psql -U usuarios_user -d usuarios_db -c "SELECT id, nombre, activo FROM usuarios;"
 
 ## Reiniciar desde cero
 

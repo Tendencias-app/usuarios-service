@@ -1,11 +1,25 @@
+from contextlib import asynccontextmanager
+from typing import List, Optional
+
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
-from typing import Optional, List
+
+import consumer
+import db
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    consumer.iniciar()   # empieza a escuchar los eventos de usuario activado/desactivado
+    yield
+    consumer.detener()
+
 
 app = FastAPI(
     title="Microservicio de Usuarios",
     description="API para la gestión e identificación de usuarios",
-    version="1.0.0"
+    version="1.1.0",
+    lifespan=lifespan,
 )
 
 # Modelo de datos para las respuestas y peticiones (Contrato Swagger)
@@ -21,6 +35,7 @@ class UsuarioCreate(UsuarioBase):
 
 class UsuarioResponse(UsuarioBase):
     id: int = Field(..., description="Número de cédula del usuario")
+    activo: bool = True
 
     class Config:
         json_schema_extra = {
@@ -28,47 +43,16 @@ class UsuarioResponse(UsuarioBase):
                 "id": 1012345678,
                 "nombre": "Juan Pérez",
                 "email": "juan@example.com",
-                "rol": "cliente"
+                "rol": "cliente",
+                "activo": True
             }
         }
 
-class EstadoRenta(BaseModel):
+class EstadoUsuario(BaseModel):
     usuario_id: int
-    puede_rentar: bool
-    multas_pendientes: int
-    motivo: Optional[str] = None
+    activo: bool
 
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "usuario_id": 1023456789,
-                "puede_rentar": False,
-                "multas_pendientes": 2,
-                "motivo": "El usuario tiene 2 multa(s) pendiente(s)"
-            }
-        }
-
-# Simula la columna multas_pendientes de la base de datos (cédula -> cantidad de multas)
-MULTAS_PENDIENTES = {
-    1012345678: 0,
-    1023456789: 2,
-    80123456: 0,
-    52987654: 0,
-    79456123: 0,
-}
-
-def _estado_renta(usuario_id: int) -> EstadoRenta:
-    if usuario_id not in MULTAS_PENDIENTES:
-        raise HTTPException(status_code=404, detail="Usuario no encontrado")
-    multas = MULTAS_PENDIENTES[usuario_id]
-    return EstadoRenta(
-        usuario_id=usuario_id,
-        puede_rentar=multas == 0,
-        multas_pendientes=multas,
-        motivo=None if multas == 0 else f"El usuario tiene {multas} multa(s) pendiente(s)",
-    )
-
-# --- ENDPOINTS (Solo exponen el contrato/Swagger, no requieren DB) ---
+# --- ENDPOINTS (CRUD: solo exponen el contrato/Swagger, aún no usan la BD) ---
 
 @app.get("/usuarios", response_model=List[UsuarioResponse], summary="Obtener lista de usuarios", tags=["Usuarios"])
 def obtener_usuarios():
@@ -85,7 +69,6 @@ def obtener_usuario(usuario_id: int):
 @app.post("/usuarios", response_model=UsuarioResponse, status_code=201, summary="Crear un nuevo usuario", tags=["Usuarios"])
 def crear_usuario(usuario: UsuarioCreate):
     """Crea un nuevo usuario. El id corresponde al número de cédula."""
-    MULTAS_PENDIENTES[usuario.id] = 0
     return {"id": usuario.id, "nombre": usuario.nombre, "email": usuario.email, "rol": usuario.rol}
 
 @app.put("/usuarios/{usuario_id}", response_model=UsuarioResponse, summary="Actualizar usuario", tags=["Usuarios"])
@@ -99,26 +82,16 @@ def eliminar_usuario(usuario_id: int):
     return None
 
 
-# --- MULTAS Y BLOQUEO DE RENTAS ---
+# --- ESTADO (lee la columna `activo` real de la base de datos) ---
 
-@app.get("/usuarios/{usuario_id}/puede-rentar", response_model=EstadoRenta, summary="Consultar si un usuario puede rentar", tags=["Multas"])
-def consultar_puede_rentar(usuario_id: int):
-    """El servicio de rentas llama este endpoint antes de crear una renta.
-    Si `puede_rentar` es false, la renta debe rechazarse."""
-    return _estado_renta(usuario_id)
-
-@app.post("/usuarios/{usuario_id}/multas", response_model=EstadoRenta, status_code=201, summary="Registrar una multa", tags=["Multas"])
-def registrar_multa(usuario_id: int):
-    """Suma una multa al usuario. Desde ese momento no podrá rentar."""
-    _estado_renta(usuario_id)  # valida que exista
-    MULTAS_PENDIENTES[usuario_id] += 1
-    return _estado_renta(usuario_id)
-
-@app.post("/usuarios/{usuario_id}/multas/pagar", response_model=EstadoRenta, summary="Pagar una multa", tags=["Multas"])
-def pagar_multa(usuario_id: int):
-    """Resta una multa al usuario. Cuando llega a 0, vuelve a poder rentar."""
-    _estado_renta(usuario_id)  # valida que exista
-    if MULTAS_PENDIENTES[usuario_id] == 0:
-        raise HTTPException(status_code=409, detail="El usuario no tiene multas pendientes")
-    MULTAS_PENDIENTES[usuario_id] -= 1
-    return _estado_renta(usuario_id)
+@app.get("/usuarios/{usuario_id}/estado", response_model=EstadoUsuario, summary="Consultar si un usuario está activo", tags=["Estado"])
+def consultar_estado(usuario_id: int):
+    """Devuelve el valor actual de `activo`. Cambia cuando llegan los eventos
+    `Usuario_usuarioActivado` y `Usuario_usuarioDesactivado`."""
+    try:
+        activo = db.obtener_activo(usuario_id)
+    except Exception:
+        raise HTTPException(status_code=503, detail="Base de datos no disponible")
+    if activo is None:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    return EstadoUsuario(usuario_id=usuario_id, activo=activo)
